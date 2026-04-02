@@ -56,7 +56,7 @@ export const initSocketService = async (io: Server) => {
     });
 
     // Handle Document Load (Initial state)
-    const stateVector = Y.encodeStateVector(doc);
+    const stateVector = Y.encodeStateVector(doc!);
     socket.emit('sync-step-1', stateVector);
 
     socket.on('sync-step-2', (stateVector: Uint8Array) => {

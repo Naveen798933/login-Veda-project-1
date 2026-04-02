@@ -17,14 +17,14 @@ export const register = async (req: Request, res: Response) => {
 
     const user = new User({ email, password, firstName, lastName });
     
-    const accessToken = authService.generateAccessToken(user._id.toString());
+    const accessToken = authService.generateAccessToken(user._id.toString(), user.email);
     const refreshToken = authService.generateRefreshToken(user._id.toString());
 
     user.refreshToken = refreshToken;
     await user.save();
 
     console.log(`✅ Registration successful: ${email}`);
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.status(201).json({ user, accessToken });
   } catch (error: unknown) {
     console.error(`❌ Registration Error for ${req.body.email}:`, error instanceof Error ? error.message : error);
@@ -40,14 +40,14 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const accessToken = authService.generateAccessToken(user._id.toString());
+    const accessToken = authService.generateAccessToken(user._id.toString(), user.email);
     const refreshToken = authService.generateRefreshToken(user._id.toString());
 
     user.refreshToken = refreshToken;
     user.lastLogin = new Date();
     await user.save();
 
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.json({ user, accessToken });
   } catch (error: unknown) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Unknown error' });
@@ -83,13 +83,13 @@ export const refresh = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Invalid refresh token' });
     }
 
-    const newAccessToken = authService.generateAccessToken(user._id.toString());
+    const newAccessToken = authService.generateAccessToken(user._id.toString(), user.email);
     const newRefreshToken = authService.generateRefreshToken(user._id.toString());
 
     user.refreshToken = newRefreshToken;
     await user.save();
 
-    res.cookie('refreshToken', newRefreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie('refreshToken', newRefreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
     res.json({ accessToken: newAccessToken });
   } catch (_error: unknown) {
     res.status(403).json({ message: 'Session expired' });
