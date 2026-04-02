@@ -1,0 +1,38 @@
+name: LogicVeda Enterprise CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Install dependencies
+      run: npm install
+
+    - name: TypeScript Build
+      run: npm run build
+
+    - name: Run Unit Tests
+      run: npm run test
+
+  docker-build:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Web Target
+      run: docker build -t logicveda-web --target web .
+      
+    - name: Build API Target
+      run: docker build -t logicveda-api --target api .

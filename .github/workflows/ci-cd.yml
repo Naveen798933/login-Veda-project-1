@@ -1,0 +1,200 @@
+name: LogicVeda CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  # ============================================
+  # LINT & TYPE CHECK
+  # ============================================
+  lint-and-type-check:
+    runs-on: ubuntu-latest
+    name: Lint & Type Check
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Lint code
+        run: npm run lint
+      
+      - name: Type check
+        run: npm run build
+
+  # ============================================
+  # UNIT TESTS
+  # ============================================
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+    needs: lint-and-type-check
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Run unit tests
+        run: npm run test -- --run
+        
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        if: always()
+
+  # ============================================
+  # E2E TESTS
+  # ============================================
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E Tests
+    needs: lint-and-type-check
+    
+    services:
+      mongodb:
+        image: mongo:8.0
+        options: >-
+          --health-cmd mongosh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Setup environment
+        run: |
+          echo "MONGODB_URI=mongodb://localhost:27017/logicveda-test" >> .env.test
+          echo "REDIS_URI=redis://localhost:6379" >> .env.test
+          echo "ACCESS_TOKEN_SECRET=test-secret-access" >> .env.test
+          echo "REFRESH_TOKEN_SECRET=test-secret-refresh" >> .env.test
+          echo "NODE_ENV=test" >> .env.test
+      
+      - name: Build backend
+        run: npm run build --workspace=@collaboration/server
+      
+      - name: Start backend server
+        run: |
+          npm run start --workspace=@collaboration/server &
+          sleep 10
+        env:
+          NODE_ENV: test
+      
+      - name: Wait for backend
+        run: |
+          npx wait-on http://localhost:5000/health --timeout 30000
+      
+      - name: Install Playwright
+        run: npx playwright install
+      
+      - name: Run E2E tests
+        run: npm run test:e2e --workspace=@collaboration/client
+        continue-on-error: true
+
+  # ============================================
+  # BUILD DOCKER IMAGES
+  # ============================================
+  build-docker:
+    runs-on: ubuntu-latest
+    name: Build Docker Images
+    needs: [unit-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Build Backend Image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./apps/server
+          file: ./apps/server/Dockerfile
+          push: false
+          tags: logicveda-api:latest
+      
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./apps/client
+          file: ./apps/client/Dockerfile
+          push: false
+          tags: logicveda-web:latest
+
+  # ============================================
+  # SECURITY CHECKS
+  # ============================================
+  security-check:
+    runs-on: ubuntu-latest
+    name: Security Check
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+  # ============================================
+  # NOTIFICATION
+  # ============================================
+  notify:
+    runs-on: ubuntu-latest
+    name: Notify Build Status
+    needs: [lint-and-type-check, unit-tests]
+    if: always()
+    
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.lint-and-type-check.result }}" == "failure" ] || [ "${{ needs.unit-tests.result }}" == "failure" ]; then
+            echo "❌ Build failed"
+            exit 1
+          fi
+          echo "✅ Build passed"

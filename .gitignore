@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+*.log
+test_out.txt
+test_out_v2.txt
+test_extended_out.txt
+client-dev-final.txt
+tmp/
+.DS_Store
+Thumbs.db
+.gemini/
+.idea/
+.vscode/
+package-lock.json
+*.local

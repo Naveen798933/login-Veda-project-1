@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logicveda-api
+  labels:
+    app: logicveda
+    component: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: logicveda
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: logicveda
+        component: backend
+    spec:
+      containers:
+      - name: api
+        image: logicveda-api:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: logicveda-secrets
+              key: MONGODB_URI
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: logicveda-secrets
+              key: REDIS_URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logicveda-api-service
+spec:
+  selector:
+    app: logicveda
+    component: backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+  type: ClusterIP
